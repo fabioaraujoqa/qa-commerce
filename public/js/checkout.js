@@ -238,5 +238,12 @@ document.addEventListener("DOMContentLoaded", function () {
         })
         .catch((error) => console.error("Erro ao finalizar compra:", error));
     });
+    function obterUserId() {
+        // Lógica para obter o userId, por exemplo, do armazenamento local ou de uma variável global
+        return localStorage.getItem('userId') || null;
+      }
+     
   });
+
+  
   

@@ -36,7 +36,8 @@ const checkoutSchema = Joi.object({
     is: "credit_card",
     then: Joi.string()
       .pattern(/^(0[1-9]|1[0-2])\/?([0-9]{4}|[0-9]{2})$/)
-      .allow(null).optional(),
+      .allow(null)
+      .optional(),
     otherwise: Joi.allow(null).optional(),
   }),
   cardCvc: Joi.string().when("paymentMethod", {
@@ -113,146 +114,6 @@ app.post("/api/registrar", (req, res) => {
   });
 });
 
-// Rota de checkout
-/* app.post("/api/checkout", (req, res) => {
-  const {
-    userId,
-    firstName,
-    lastName,
-    address,
-    number,
-    cep,
-    phone,
-    email,
-    paymentMethod,
-    cardNumber,
-    cardExpiry,
-    cardCvc,
-    boletoCode,
-    pixKey,
-    createAccount,
-    password,
-  } = req.body;
-
-  // Validação com Joi
-  const { error } = checkoutSchema.validate(req.body);
-  if (error) {
-    return res.status(400).send(error.details[0].message);
-  }
-
-  const shippingFee = 19.9; // Frete fixo
-
-  // Verificar se o e-mail já está registrado antes de criar a conta
-  if (createAccount) {
-    db.get("SELECT * FROM Users WHERE email = ?", [email], (err, user) => {
-      if (err) {
-        return res.status(500).send("Erro ao verificar e-mail.");
-      }
-      if (user) {
-        return res.status(400).send("E-mail já registrado. Tente um email diferente.");
-      }
-
-      // Prossiga com a criação do pedido e da conta
-      createOrder(userId);
-    });
-  } else {
-    // Prossiga com a criação do pedido sem criar conta
-    createOrder(userId);
-  }
-
-  function createOrder(userId) {
-    const query = `
-      SELECT Products.price, Cart.quantity FROM Cart 
-      JOIN Products ON Cart.product_id = Products.id 
-      WHERE ${userId ? "Cart.user_id = ?" : "1=0"};`;
-
-    db.all(query, userId ? [userId] : [], (err, rows) => {
-      if (err) {
-        return res.status(500).send("Erro ao calcular total do pedido.");
-      }
-
-      const totalPrice =
-        rows.reduce((total, item) => total + item.price * item.quantity, 0) +
-        shippingFee;
-
-      db.run(
-        `
-          INSERT INTO Orders (
-              ${userId ? 'user_id, ' : ''}first_name, last_name, address, number, cep, phone, email,
-              payment_method, card_number, card_expiry, card_cvc, boleto_code, pix_key, total_price, status
-          ) VALUES (${userId ? '?, ' : ''}?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          ...(userId ? [userId] : []), // Condicionalmente incluir userId
-          firstName,
-          lastName,
-          address,
-          number,
-          cep,
-          phone,
-          email,
-          paymentMethod,
-          cardNumber || null,
-          cardExpiry || null,
-          cardCvc || null,
-          boletoCode || null,
-          pixKey || null,
-          totalPrice,
-          "Pagamento aprovado",
-        ],
-        function (err) {
-          if (err) {
-            return res.status(500).send("Erro ao finalizar pedido.");
-          }
-
-          const orderId = this.lastID;
-          const orderNumber = `${orderId}-${
-            Math.floor(Math.random() * 9000) + 1000
-          }`;
-
-          db.run(
-            "UPDATE Orders SET order_number = ? WHERE id = ?",
-            [orderNumber, orderId],
-            function (err) {
-              if (err) {
-                return res.status(500).send("Erro ao atualizar número do pedido.");
-              }
-
-              // Limpar o carrinho após a conclusão do pedido
-              db.run("DELETE FROM Cart WHERE user_id = ?", [userId], function (err) {
-                if (err) {
-                  return res.status(500).send("Erro ao limpar o carrinho.");
-                }
-
-                if (createAccount) {
-                  const saltRounds = 10;
-                  bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
-                    if (err) {
-                      return res.status(500).send("Erro ao criar conta.");
-                    }
-
-                    db.run(
-                      "INSERT INTO Users (email, password, name) VALUES (?, ?, ?)",
-                      [email, hashedPassword, `${firstName} ${lastName}`],
-                      function (err) {
-                        if (err) {
-                          return res.status(500).send("Erro ao criar conta.");
-                        }
-                        res.status(201).send({ id: orderId, orderNumber });
-                      }
-                    );
-                  });
-                } else {
-                  res.status(201).send({ id: orderId, orderNumber });
-                }
-              });
-            }
-          );
-        }
-      );
-    });
-  }
-}); */
-
 app.post("/api/checkout", (req, res) => {
   const {
     userId,
@@ -288,7 +149,9 @@ app.post("/api/checkout", (req, res) => {
         return res.status(500).send("Erro ao verificar e-mail.");
       }
       if (user) {
-        return res.status(400).send("E-mail já registrado. Tente um email diferente");
+        return res
+          .status(400)
+          .send("E-mail já registrado. Tente um email diferente");
       }
 
       // Criar a conta e depois o pedido
@@ -322,7 +185,7 @@ app.post("/api/checkout", (req, res) => {
   }
 
   function processOrder(finalUserId) {
-  const query = `
+    const query = `
     SELECT Products.price, Cart.quantity FROM Cart 
     JOIN Products ON Cart.product_id = Products.id 
     WHERE Cart.user_id = ?;`;
@@ -336,13 +199,15 @@ app.post("/api/checkout", (req, res) => {
         rows.reduce((total, item) => total + item.price * item.quantity, 0) +
         shippingFee;
 
-        db.run(
-          `
+      const initialStatus = 'Aguardando pagamento'; // Status inicial
+
+      db.run(
+        `
             INSERT INTO Orders (
                 user_id, first_name, last_name, address, number, cep, phone, email,
                 payment_method, card_number, card_expiry, card_cvc, boleto_code, pix_key, total_price, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
+        [
           finalUserId,
           firstName,
           lastName,
@@ -358,7 +223,7 @@ app.post("/api/checkout", (req, res) => {
           boletoCode || null,
           pixKey || null,
           totalPrice,
-          "Pagamento aprovado",
+          initialStatus, // Usa o status inicial aqui
         ],
         function (err) {
           if (err) {
@@ -375,22 +240,81 @@ app.post("/api/checkout", (req, res) => {
             [orderNumber, orderId],
             function (err) {
               if (err) {
-                return res.status(500).send("Erro ao atualizar número do pedido.");
+                return res
+                  .status(500)
+                  .send("Erro ao atualizar número do pedido.");
               }
 
               // Limpar o carrinho após a conclusão do pedido
-              db.run("DELETE FROM Cart WHERE user_id = ?", [finalUserId], function (err) {
-                if (err) {
-                  return res.status(500).send("Erro ao limpar o carrinho.");
+              db.run(
+                "DELETE FROM Cart WHERE user_id = ?",
+                [finalUserId],
+                function (err) {
+                  if (err) {
+                    return res.status(500).send("Erro ao limpar o carrinho.");
+                  }
+                  scheduleOrderStatusUpdate(orderId);
+
+                  res.status(201).send({ id: orderId, orderNumber });
+
+                  setTimeout(() => {
+                    updateOrderStatus(orderId);
+                  }, 60000); // 2 minutos em milissegundos
                 }
-                res.status(201).send({ id: orderId, orderNumber });
-              });
+              );
             }
           );
         }
       );
     });
   }
+
+  function updateOrderStatus(orderId) {
+    db.run(
+      "UPDATE Orders SET status = ? WHERE id = ?",
+      ['Pagamento aprovado', orderId],
+      function (err) {
+        if (err) {
+          console.error("Erro ao atualizar status do pedido:", err);
+        } else {
+          console.log(`Status do pedido ${orderId} atualizado para Pagamento aprovado.`);
+        }
+      }
+    );
+  }
+  
+  // Função para agendar a atualização do status do pedido
+  function scheduleOrderStatusUpdate(orderId) {
+    const nextStatus = "Pagamento aprovado"; // Próximo status após o atraso
+
+    setTimeout(() => {
+      fetch("http://localhost:3000/api/atualizar-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orderId, nextStatus }),
+      }).catch((error) =>
+        console.error("Erro ao atualizar status do pedido:", error)
+      );
+    }, 2 * 60 * 1000); // Atraso de 2 minutos
+  }
+});
+
+//Endpoint para atualizar o status do pedido
+
+app.post('/api/atualizar-status', (req, res) => {
+  const { orderId, nextStatus } = req.body;
+  db.run(
+    'UPDATE Orders SET status = ? WHERE id = ? AND user_id = ?',
+    [nextStatus, orderId, userId],
+    function (err) {
+      if (err) {
+        return res.status(500).send('Erro ao atualizar o status do pedido.');
+      }
+      res.status(200).send({ message: 'Status atualizado com sucesso.' });
+    }
+  );
 });
 
 // Limpar o carrinho para um usuário específico
@@ -581,12 +505,44 @@ app.get("/api/ultimo-pedido/:userId", (req, res) => {
   );
 });
 
+// Endpoint para simular a atualização do status do pedido após 2 minutos
+app.post("/api/atualizar-status", (req, res) => {
+  const { orderId, nextStatus } = req.body;
+  db.run(
+    "UPDATE Orders SET status = ? WHERE id = ?",
+    [nextStatus, orderId],
+    function (err) {
+      if (err) {
+        return res.status(500).send("Erro ao atualizar o status do pedido.");
+      }
+      res.status(200).send({ message: "Status atualizado com sucesso." });
+    }
+  );
+});
+
+// Rota para simular a atualização do status do pedido após 2 minutos
+app.put("/api/orders/:orderId/update-status", (req, res) => {
+  const orderId = req.params.orderId;
+  const { status } = req.body;
+
+  db.run(
+    "UPDATE Orders SET status = ? WHERE id = ?",
+    [status, orderId],
+    function (err) {
+      if (err) {
+        return res.status(500).send("Erro ao atualizar status do pedido.");
+      }
+      res.status(200).send("Status atualizado com sucesso.");
+    }
+  );
+});
+
 // Servir arquivos estáticos HTML diretamente
 app.get("/dashboard.html", (req, res) => {
   res.sendFile(path.join(__dirname, "../public/dashboard.html"));
 });
 
 app.listen(port, async () => {
-  console.log((`Servidor rodando em http://localhost:${port}`));
-  console.log((`Documentação rodando em http://localhost:${port}/api-docs`));
+  console.log(`Servidor rodando em http://localhost:${port}`);
+  console.log(`Documentação rodando em http://localhost:${port}/api-docs`);
 });
